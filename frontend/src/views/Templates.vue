@@ -38,6 +38,9 @@
           :data-cy="`type-${props.row.type}`">
           {{ $tc('templates.typeCampaignVisual') }}
         </b-tag>
+        <b-tag v-else-if="props.row.type === 'system'" :class="props.row.type" :data-cy="`type-${props.row.type}`">
+          {{ $tc('templates.typeSystem') }}
+        </b-tag>
         <b-tag v-else :class="props.row.type" :data-cy="`type-${props.row.type}`">
           {{ $tc('templates.typeTransactional') }}
         </b-tag>
@@ -69,13 +72,16 @@
               <b-icon icon="pencil-outline" size="is-small" />
             </b-tooltip>
           </a>
-          <a href="#" @click.prevent="$utils.prompt(`Clone template`,
+          <a v-if="props.row.type !== 'system'" href="#" @click.prevent="$utils.prompt(`Clone template`,
             { placeholder: 'Name', value: `Copy of ${props.row.name}` },
             (name) => cloneTemplate(name, props.row))" data-cy="btn-clone" :aria-label="$t('globals.buttons.clone')">
             <b-tooltip :label="$t('globals.buttons.clone')" type="is-dark">
               <b-icon icon="file-multiple-outline" size="is-small" />
             </b-tooltip>
           </a>
+          <span v-else class="a has-text-grey-light">
+            <b-icon icon="file-multiple-outline" size="is-small" />
+          </span>
           <a v-if="!props.row.isDefault && props.row.type === 'campaign'" href="#"
             @click.prevent="$utils.confirm(null, () => makeTemplateDefault(props.row))" data-cy="btn-set-default"
             :aria-label="$t('templates.makeDefault')">
@@ -87,7 +93,7 @@
             <b-icon icon="check-circle-outline" size="is-small" />
           </span>
 
-          <a v-if="!props.row.isDefault" href="#" @click.prevent="$utils.confirm(null, () => deleteTemplate(props.row))"
+          <a v-if="!props.row.isDefault && props.row.type !== 'system'" href="#" @click.prevent="$utils.confirm(null, () => deleteTemplate(props.row))"
             data-cy="btn-delete" :aria-label="$t('globals.buttons.delete')">
             <b-tooltip :label="$t('globals.buttons.delete')" type="is-dark">
               <b-icon icon="trash-can-outline" size="is-small" />

@@ -13,6 +13,7 @@
             <input v-if="templateId" type="hidden" name="template_id" :value="templateId" />
             <input v-if="contentType" type="hidden" name="content_type" :value="contentType" />
             <input v-if="templateType" type="hidden" name="template_type" :value="templateType" />
+            <input v-if="templateName" type="hidden" name="template_name" :value="templateName" />
             <input v-if="archiveMeta" type="hidden" name="archive_meta" :value="archiveMeta" />
             <input v-if="body" type="hidden" name="body" :value="body" />
           </form>
@@ -54,6 +55,7 @@ export default {
     body: { type: String, default: '' },
     contentType: { type: String, default: '' },
     templateId: { type: [Number, null], default: null },
+    templateName: { type: String, default: '' },
     isArchive: { type: Boolean, default: false },
   },
 

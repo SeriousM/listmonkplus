@@ -243,7 +243,11 @@ func main() {
 	}
 
 	// Initialize the global admin/sub e-mail notifier.
-	initNotifs(fs, i18n, emailMsgr, urlCfg, ko)
+	// First, seed system templates from static files into DB (idempotent).
+	initSystemTemplates(fs, core)
+
+	// Then initialize notifs using DB-stored templates.
+	initNotifs(core, i18n, emailMsgr, urlCfg, ko)
 
 	// Initialize and cache tx templates in memory.
 	initTxTemplates(mgr, core)

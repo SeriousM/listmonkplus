@@ -81,6 +81,7 @@ func (a *App) PreviewTemplate(c echo.Context) error {
 // PreviewTemplateBody renders the HTML preview of a template given its type and body.
 func (a *App) PreviewTemplateBody(c echo.Context) error {
 	tpl := models.Template{
+		Name: c.FormValue("template_name"),
 		Type: c.FormValue("template_type"),
 		Body: c.FormValue("body"),
 	}
@@ -232,6 +233,7 @@ func (a *App) validateTemplate(o models.Template) error {
 // previewTemplate renders the HTML preview of a template.
 func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 	var out []byte
+
 	if tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignVisual {
 		camp := models.Campaign{
 			UUID:         dummyUUID,
@@ -254,6 +256,114 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 		}
 		out = msg.Body()
+	} else if tpl.Type == models.TemplateTypeSystem {
+		// System templates can reference shared defines in base/system templates.
+		// Build a full template set from DB system templates and override the
+		// currently previewed template's body.
+		systemTpls, err := a.core.GetTemplates(models.TemplateTypeSystem, false)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+		}
+
+		var (
+			found    bool
+			combined strings.Builder
+		)
+
+		for _, st := range systemTpls {
+			if st.Name == tpl.Name {
+				combined.WriteString(tpl.Body)
+				found = true
+			} else {
+				combined.WriteString(st.Body)
+			}
+			combined.WriteString("\n")
+		}
+
+		// If the target system template doesn't exist in DB (eg. first-time unsaved
+		// preview), append current body so parse/execute can still work.
+		if !found {
+			combined.WriteString(tpl.Body)
+			combined.WriteString("\n")
+		}
+
+		t, err := template.New(models.BaseTpl).Funcs(initTplFuncs(a.i18n, a.urlCfg)).Parse(combined.String())
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+		}
+
+		// The "base" template row contains {{ define "header" }} and
+		// {{ define "footer" }} blocks only — there is no {{ define "base" }}
+		// wrapper, so executing template "base" yields empty output.
+		// Render both halves together so the preview is meaningful.
+		execName := tpl.Name
+		if execName == models.BaseTpl {
+			execName = "_base_preview"
+			if _, err = t.New("_base_preview").Parse(
+				`{{ template "header" . }}{{ template "footer" . }}`,
+			); err != nil {
+				return nil, echo.NewHTTPError(http.StatusBadRequest,
+					a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+			}
+		}
+
+		// Build per-template dummy data that matches what the real call sites pass.
+		var tplData any
+		switch execName {
+		case "subscriber-optin":
+			tplData = subOptin{
+				Subscriber: dummySubscriber,
+				OptinURL:   "https://listmonk.app/optin/demo",
+				UnsubURL:   "https://listmonk.app/subscription/demo",
+				Lists:      []models.List{{Name: "Demo List", Type: "public"}},
+			}
+		case "subscriber-optin-campaign":
+			tplData = struct {
+				Lists        []models.List
+				OptinURLAttr template.HTMLAttr
+			}{
+				Lists:        []models.List{{Name: "Demo List", Type: "public"}},
+				OptinURLAttr: `href="https://listmonk.app/optin/demo"`,
+			}
+		case "campaign-status":
+			tplData = map[string]any{
+				"ID":     1,
+				"Name":   "Demo Campaign",
+				"Status": "finished",
+				"Sent":   100,
+				"ToSend": 100,
+				"Reason": "",
+			}
+		case "forgot-password":
+			tplData = struct {
+				ResetURL string
+			}{
+				ResetURL: "https://listmonk.app/auth/reset/demo",
+			}
+		case "import-status":
+			tplData = struct {
+				Name     string
+				Status   string
+				Imported int
+				Total    int
+			}{
+				Name:     "subscribers.csv",
+				Status:   "finished",
+				Imported: 150,
+				Total:    150,
+			}
+		default:
+			tplData = dummySubscriber
+		}
+
+		var buf strings.Builder
+		if err := t.ExecuteTemplate(&buf, execName, tplData); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+		}
+		out = []byte(buf.String())
 	} else {
 		// Compile transactional template.
 		if err := tpl.Compile(a.manager.GenericTemplateFuncs()); err != nil {

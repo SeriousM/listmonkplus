@@ -756,26 +756,41 @@ func initMediaStore(ko *koanf.Koanf) media.Store {
 }
 
 // initNotifs initializes the notifier with the system e-mail templates.
-func initNotifs(fs stuffbin.FileSystem, i *i18n.I18n, em *email.Emailer, u *UrlConfig, ko *koanf.Koanf) {
-	tpls, err := stuffbin.ParseTemplatesGlob(initTplFuncs(i, u), fs, "/static/email-templates/*.html")
+func initNotifs(co *core.Core, i *i18n.I18n, em *email.Emailer, u *UrlConfig, ko *koanf.Koanf) {
+	// Load all system templates from the DB (seeded from static files on startup).
+	systemTpls, err := co.GetTemplates(models.TemplateTypeSystem, false)
 	if err != nil {
-		lo.Fatalf("error parsing e-mail notif templates: %v", err)
+		lo.Fatalf("error loading system e-mail templates from DB: %v", err)
+	}
+	if len(systemTpls) == 0 {
+		lo.Fatalf("no system e-mail templates found in DB. Run --upgrade or reinstall.")
 	}
 
-	// Read the notification templates.
-	html, err := fs.Read("/static/email-templates/base.html")
-	if err != nil {
-		lo.Fatalf("error reading static/email-templates/base.html: %v", err)
+	// Concatenate all system template bodies into one string and parse as a
+	// single html/template set (they use {{ define "name" }} blocks internally).
+	var combined strings.Builder
+	for _, t := range systemTpls {
+		combined.WriteString(t.Body)
+		combined.WriteString("\n")
 	}
 
-	// Determine whether the notification templates are HTML or plaintext.
-	// Copy the first few (arbitrary) bytes of the template and check if has the <!doctype html> tag.
-	ln := min(len(html), 256)
-	h := make([]byte, ln)
-	copy(h, html[0:ln])
+	tpls, err := template.New("base").Funcs(initTplFuncs(i, u)).Parse(combined.String())
+	if err != nil {
+		lo.Fatalf("error parsing system e-mail templates from DB: %v", err)
+	}
 
+	// Determine content type from the base template body.
+	var baseBody string
+	for _, t := range systemTpls {
+		if t.Name == "base" {
+			baseBody = t.Body
+			break
+		}
+	}
+
+	ln := min(len(baseBody), 256)
 	contentType := models.CampaignContentTypeHTML
-	if !bytes.Contains(bytes.ToLower(h), []byte("<!doctype html")) {
+	if !bytes.Contains(bytes.ToLower([]byte(baseBody[:ln])), []byte("<!doctype html")) {
 		contentType = models.CampaignContentTypePlain
 		lo.Println("system e-mail templates are plaintext")
 	}
@@ -785,6 +800,34 @@ func initNotifs(fs stuffbin.FileSystem, i *i18n.I18n, em *email.Emailer, u *UrlC
 		SystemEmails: ko.Strings("app.notify_emails"),
 		ContentType:  contentType,
 	}, tpls, em, lo)
+}
+
+// initSystemTemplates seeds the static system e-mail HTML templates (*.html) from the
+// embedded filesystem into the database on startup. Each template is only inserted if
+// a system template with that name doesn't already exist, so user edits are preserved.
+// The template name is derived from the filename without the extension (e.g. "subscriber-optin").
+func initSystemTemplates(fs stuffbin.FileSystem, co *core.Core) {
+	files, err := fs.Glob("/static/email-templates/*.html")
+	if err != nil {
+		lo.Fatalf("error listing system e-mail templates: %v", err)
+	}
+
+	for _, f := range files {
+		b, err := fs.Read(f)
+		if err != nil {
+			lo.Fatalf("error reading system template '%s': %v", f, err)
+		}
+
+		// Derive name: "static/email-templates/subscriber-optin.html" -> "subscriber-optin"
+		base := path.Base(f)
+		name := strings.TrimSuffix(base, ".html")
+
+		if err := co.UpsertSystemTemplate(name, b); err != nil {
+			lo.Fatalf("error seeding system template '%s': %v", name, err)
+		}
+	}
+
+	lo.Printf("seeded %d system e-mail templates into DB", len(files))
 }
 
 // initBounceManager initializes the bounce manager that scans mailboxes and listens to webhooks

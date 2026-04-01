@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/gofrs/uuid/v5"
@@ -71,6 +72,9 @@ func install(lastVer string, db *sqlx.DB, fs stuffbin.FileSystem, prompt, idempo
 
 	// Templates.
 	campTplID, archiveTplID := installTemplates(q)
+
+	// System e-mail templates.
+	installSystemTemplates(db, fs)
 
 	// Sample campaign.
 	installCampaign(campTplID, archiveTplID, q)
@@ -238,6 +242,34 @@ func installTemplates(q *models.Queries) (int, int) {
 	}
 
 	return campTplID, archiveTplID
+}
+
+// installSystemTemplates seeds the static system e-mail HTML templates (*.html) into the
+// DB during a fresh installation. Only inserts if a system template with that name doesn't
+// already exist (idempotent).
+func installSystemTemplates(db *sqlx.DB, fs stuffbin.FileSystem) {
+	const q = `INSERT INTO templates (name, type, subject, body)
+		SELECT $1, 'system', '', $2
+		WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = $1 AND type = 'system')`
+
+	files, err := fs.Glob("/static/email-templates/*.html")
+	if err != nil {
+		lo.Fatalf("error listing system e-mail templates: %v", err)
+	}
+
+	for _, f := range files {
+		b, err := fs.Read(f)
+		if err != nil {
+			lo.Fatalf("error reading system template '%s': %v", f, err)
+		}
+
+		// Derive name: "/static/email-templates/subscriber-optin.html" -> "subscriber-optin"
+		name := strings.TrimSuffix(path.Base(f), ".html")
+
+		if _, err := db.Exec(q, name, b); err != nil {
+			lo.Fatalf("error upserting system template '%s': %v", name, err)
+		}
+	}
 }
 
 func installCampaign(campTplID, archiveTplID int, q *models.Queries) {

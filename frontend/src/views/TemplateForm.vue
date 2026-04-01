@@ -37,6 +37,9 @@
                   <option value="tx">
                     {{ $tc('templates.typeTransactional') }}
                   </option>
+                  <option v-if="isEditing && form.type === 'system'" value="system">
+                    {{ $tc('templates.typeSystem') }}
+                  </option>
                 </b-select>
               </b-field>
             </div>
@@ -65,7 +68,7 @@
             <template v-if="form.type === 'campaign'">
               {{ $t('templates.placeholderHelp', { placeholder: egPlaceholder }) }}
             </template>
-            <a target="_blank" rel="noopener noreferer" href="https://listmonk.app/docs/templating">
+            <a v-if="form.type !== 'system'" target="_blank" rel="noopener noreferer" href="https://listmonk.app/docs/templating">
               {{ $t('globals.buttons.learnMore') }}
             </a>
           </p>
@@ -81,7 +84,7 @@
       </div>
     </form>
     <campaign-preview v-if="previewItem" is-post type="template" :title="previewItem.name"
-      :template-type="previewItem.type" :body="form.body" @close="onTogglePreview" />
+      :template-type="previewItem.type" :template-name="previewItem.name" :body="form.body" @close="onTogglePreview" />
   </section>
 </template>
 

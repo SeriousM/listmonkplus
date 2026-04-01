@@ -774,11 +774,11 @@ func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 	// Prepare sample opt-in message for the campaign.
 	var b bytes.Buffer
 
-	if err := notifs.Tpls.ExecuteTemplate(&b, "optin-campaign", struct {
+	if err := notifs.Tpls.ExecuteTemplate(&b, "subscriber-optin-campaign", struct {
 		Lists        []models.List
 		OptinURLAttr template.HTMLAttr
 	}{lists, optinURLAttr}); err != nil {
-		a.log.Printf("error compiling 'optin-campaign' template: %v", err)
+		a.log.Printf("error compiling 'subscriber-optin-campaign' template: %v", err)
 		return o, echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
 	}

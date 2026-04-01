@@ -86,3 +86,18 @@ func (c *Core) DeleteTemplate(id int) error {
 
 	return nil
 }
+
+// UpsertSystemTemplate seeds a system template into the DB if it doesn't already exist,
+// preserving any user edits. name is the template's unique name (e.g. "subscriber-optin"),
+// body is the raw HTML template content.
+func (c *Core) UpsertSystemTemplate(name string, body []byte) error {
+	const q = `INSERT INTO templates (name, type, subject, body)
+		SELECT $1, 'system', '', $2
+		WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = $1 AND type = 'system')`
+
+	if _, err := c.db.Exec(q, name, body); err != nil {
+		return err
+	}
+	return nil
+}
+

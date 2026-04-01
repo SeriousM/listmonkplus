@@ -8,6 +8,21 @@ listmonk is a standalone, self-hosted, newsletter and mailing list manager. It i
 
 Visit [listmonk.app](https://listmonk.app) for more info. Check out the [**live demo**](https://demo.listmonk.app).
 
+---
+
+## ListMonk+ — additional features
+
+This is a fork of listmonk with the following additions:
+
+### Editable system e-mail templates
+
+All system notification e-mails (opt-in confirmation, campaign status, password reset, import status, etc.) are now exposed in the **Templates** UI as a first-class `system` type.
+
+- System templates appear in the Templates list tagged **system** and can be previewed and edited just like campaign or transactional templates.
+- They are seeded automatically on first install and on every startup (idempotent insert — existing edits are preserved).
+- Clone and delete are disabled for system templates to prevent accidentally breaking required notifications.
+- The 8 built-in system templates are: `base`, `subscriber-optin`, `subscriber-optin-campaign`, `campaign-status`, `subscriber-data`, `forgot-password`, `import-status`, `smtp-test`.
+
 ## Installation
 
 ### Docker
